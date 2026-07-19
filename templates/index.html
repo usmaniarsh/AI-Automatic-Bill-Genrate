@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en" x-data="billingApp()" x-init="init()" :class="{ 'dark': darkMode }">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="/manifest.json">
+<title>{{ settings.company_name }} - Billing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // must run AFTER the Tailwind CDN script (it creates window.tailwind first)
+  tailwind.config = { darkMode: 'class' };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<style>
+  body { font-family: 'Lexend', 'Segoe UI', system-ui, sans-serif; }
+  h1, h2, h3, .font-extrabold, .font-bold { letter-spacing: -0.01em; }
+  .pill { border-radius: 9999px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+  .dark ::-webkit-scrollbar-thumb { background: #475569; }
+  [x-cloak] { display: none !important; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; padding-bottom: 0; }
+    .print-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 pb-20 transition-colors">
+
+  <!-- Top bar -->
+  <div class="no-print bg-white dark:bg-slate-800 border-b-4 border-blue-500 sticky top-0 z-30 shadow-sm transition-colors">
+    <div class="max-w-3xl mx-auto flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 sm:py-3">
+      <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <span class="text-xl sm:text-2xl shrink-0">❄️</span>
+        <span class="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 tracking-wide truncate" x-text="settings.company_name"></span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span x-show="amcDueCount > 0" @click="view='amc'; loadAmc()" class="pill bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[11px] font-bold px-2.5 py-1 border border-amber-100 dark:border-amber-900 cursor-pointer">
+          🔔 <span x-text="amcDueCount"></span> due
+        </span>
+        <span x-show="stats.total_due > 0" class="pill bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-300 text-[11px] font-bold px-2.5 py-1 border border-red-100 dark:border-red-900">
+          ₹<span x-text="(stats.total_due||0).toFixed(0)"></span> due
+        </span>
+        <button @click="toggleDarkMode()" title="Toggle theme"
+                class="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 text-sm sm:text-base shrink-0">
+          <span x-text="darkMode ? '☀️' : '🌙'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-3xl mx-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+
+    <!-- ============ HOME VIEW ============ -->
+    <template x-if="view === 'home'">
+      <div class="space-y-3 sm:space-y-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <h1 class="text-xl sm:text-2xl font-extrabold text-blue-700 dark:text-blue-400" x-text="settings.company_name"></h1>
+          <p x-show="settings.owner_name" class="text-xs text-slate-400 dark:text-slate-500 font-medium">👤 Owner: <span x-text="settings.owner_name"></span></p>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" x-text="'Today: ' + today"></p>
+        </div>
+
+        <!-- AMC reminder banner -->
+        <div x-show="amcDueCount > 0" @click="view='amc'; loadAmc()"
+             class="cursor-pointer bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl shadow-sm p-4 sm:p-5 text-white flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wide opacity-90">🔔 Service Reminders</p>
+            <p class="text-sm mt-1"><span class="font-bold" x-text="amcDueCount"></span> customer(s) due for AC service soon</p>
+          </div>
+          <span class="text-xl">→</span>
+        </div>
+
+        <!-- AI insight banner -->
+        <div x-show="analytics.growth_pct !== undefined" class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl shadow-sm p-4 sm:p-5 text-white">
+          <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide opacity-90">✨ AI Insight</div>
+          <p class="text-sm mt-1.5 leading-relaxed">
+            This month's revenue is <span class="font-bold" x-text="'₹' + (analytics.this_month_revenue||0).toFixed(0)"></span>,
+            <span x-text="analytics.growth_pct >= 0 ? 'up' : 'down'"></span>
+            <span class="font-bold" x-text="Math.abs(analytics.growth_pct||0) + '%'"></span> vs last month.
+            <template x-if="analytics.top_categories && analytics.top_categories.length">
+              <span> Top service: <span class="font-bold" x-text="analytics.top_categories[0].name"></span>.</span>
+            </template>
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 sm:gap-4">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 transition-colors">
+            <p class="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase">Total Bills</p>
+            <p class="text-2xl font-extrabold text-blue-700 dark:text-blue-400 mt-1" x-text="stats.total_bills ?? 0"></p>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 transition-colors">
+            <p class="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase">Total Revenue</p>
+            <p class="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1" x-text="'₹' + (stats.total_revenue ?? 0).toFixed(0)"></p>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 transition-colors">
+            <p class="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase">Today's Bills</p>
+            <p class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1" x-text="stats.today_bills ?? 0"></p>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 transition-colors">
+            <p class="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase">Today's Revenue</p>
+            <p class="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1" x-text="'₹' + (stats.today_revenue ?? 0).toFixed(0)"></p>
+          </div>
+        </div>
+
+        <button @click="goToBill()"
+                class="no-print w-full pill bg-blue-600 text-white py-3.5 text-sm font-semibold hover:bg-blue-700 shadow-sm">
+          ⚡ Generate New Bill
+        </button>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="flex justify-between items-center mb-3">
+            <h2 class="font-bold text-blue-700 dark:text-blue-400 text-sm">Recent Bills</h2>
+            <button @click="view='history'; loadHistory()" class="text-xs text-blue-600 dark:text-blue-400 font-semibold">View all →</button>
+          </div>
+          <template x-for="b in stats.recent || []" :key="b.id">
+            <div class="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-700 last:border-0 text-sm">
+              <div class="min-w-0">
+                <p class="font-semibold truncate" x-text="b.bill_no + ' · ' + (b.customer_name || 'Walk-in')"></p>
+                <p class="text-xs text-slate-400 dark:text-slate-500" x-text="b.bill_date"></p>
+              </div>
+              <p class="font-semibold text-green-600 dark:text-green-400 shrink-0 ml-2" x-text="'₹'+b.total_amount.toFixed(2)"></p>
+            </div>
+          </template>
+          <p x-show="!(stats.recent && stats.recent.length)" class="text-sm text-slate-400 dark:text-slate-500">No bills yet. Generate your first one!</p>
+        </div>
+      </div>
+    </template>
+
+    <!-- ============ BILL (GENERATE / EDIT) VIEW ============ -->
+    <template x-if="view === 'bill'">
+      <div class="space-y-3 sm:space-y-4">
+
+        <!-- Header card -->
+        <div class="print-card bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-blue-700 dark:text-blue-400 break-words" x-text="settings.company_name"></h1>
+            <span class="pill bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1 sm:py-1.5 border border-blue-100 dark:border-blue-900 whitespace-nowrap">
+              <span x-text="editingBillId ? '✎ EDITING' : '⚡ INVOICE'"></span>
+            </span>
+          </div>
+
+          <div class="bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 text-sm">
+            <p class="text-blue-900 dark:text-blue-200 font-medium" x-text="settings.address"></p>
+            <p x-show="settings.owner_name" class="text-blue-800 dark:text-blue-300 text-xs mt-1 font-semibold">👤 Owner: <span x-text="settings.owner_name"></span></p>
+            <p x-show="settings.gst_number" class="text-blue-900 dark:text-blue-200 text-xs mt-1">GSTIN: <span x-text="settings.gst_number"></span></p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 mb-1">
+            <div class="pill border border-slate-200 dark:border-slate-600 px-3 sm:px-4 py-2 text-xs sm:text-sm flex items-center gap-2 min-w-0">📱 <span class="truncate" x-text="settings.phone"></span></div>
+            <div class="pill border border-slate-200 dark:border-slate-600 px-3 sm:px-4 py-2 text-xs sm:text-sm flex items-center gap-2 min-w-0">✉️ <span class="truncate" x-text="settings.email"></span></div>
+          </div>
+        </div>
+
+        <!-- AI Assistant -->
+        <div class="no-print bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="pill bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 text-xs font-bold px-3 py-1 border border-indigo-100 dark:border-indigo-900">✨ AI ASSISTANT</span>
+          </div>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mb-2">Type or speak in plain Hindi/English — e.g. "AC gas filling 500 qty 2, PCB repair 400"</p>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" x-model="aiText" @keydown.enter="aiParse()"
+                   placeholder="AC 1.5 ton service 400, gas filling 600 qty 1..."
+                   class="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            <div class="flex gap-2">
+              <button @click="startVoice()" :disabled="aiLoading"
+                      class="pill px-4 py-2.5 sm:py-0 text-sm font-semibold shrink-0"
+                      :class="listening ? 'bg-red-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+                <span x-text="listening ? '● Listening' : '🎤'"></span>
+              </button>
+              <button @click="aiParse()" :disabled="aiLoading"
+                      class="pill bg-indigo-600 text-white px-5 py-2.5 sm:py-0 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 shrink-0">
+                <span x-show="!aiLoading">Add via AI</span>
+                <span x-show="aiLoading">...</span>
+              </button>
+            </div>
+          </div>
+          <p x-show="!voiceSupported" class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">Voice input isn't supported in this browser — typing works everywhere.</p>
+        </div>
+
+        <!-- Customer / Bill info -->
+        <div class="print-card bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="relative">
+              <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Name</span>
+              <input type="text" x-model="bill.customer_name" @input="onCustomerInput()" @focus="showCustomerSuggest = true"
+                     placeholder="Customer Name/Company"
+                     class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <div x-show="showCustomerSuggest && customerSuggestions.length"
+                   @click.outside="showCustomerSuggest = false"
+                   class="no-print absolute z-20 left-0 top-full mt-1 w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg text-xs overflow-hidden">
+                <template x-for="c in customerSuggestions" :key="c.customer_name">
+                  <div @click="applyCustomer(c)" class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-slate-600 cursor-pointer">
+                    <p class="font-semibold" x-text="c.customer_name"></p>
+                    <p class="text-slate-400" x-text="c.customer_address"></p>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <div>
+              <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Bill No</span>
+              <input type="text" x-model="bill.bill_no" readonly
+                     class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Phone</span>
+              <input type="text" x-model="bill.customer_phone" placeholder="Customer phone"
+                     class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+            </div>
+            <div>
+              <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Date</span>
+              <input type="text" x-model="bill.date" readonly
+                     class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <div>
+            <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Address</span>
+            <input type="text" x-model="bill.customer_address" placeholder="Customer address"
+                   class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+          </div>
+          <div>
+            <span class="pill bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1">Email</span>
+            <input type="email" x-model="bill.customer_email" placeholder="Customer email (for e-invoice)"
+                   class="w-full mt-1.5 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+          </div>
+        </div>
+
+        <!-- Line items -->
+        <div class="print-card bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table class="w-full min-w-[560px] sm:min-w-0 text-sm">
+              <thead>
+                <tr class="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs uppercase">
+                  <th class="p-2 rounded-l-lg text-left w-10">Sr</th>
+                  <th class="p-2 text-left">Particular</th>
+                  <th class="p-2 w-20">Rate (₹)</th>
+                  <th class="p-2 w-16">Qty</th>
+                  <th class="p-2 w-24">Amount</th>
+                  <th class="p-2 rounded-r-lg w-8 no-print"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(item, idx) in items" :key="idx">
+                  <tr class="border-b border-slate-100 dark:border-slate-700 relative">
+                    <td class="p-2 text-blue-600 dark:text-blue-400 font-medium" x-text="idx+1"></td>
+                    <td class="p-2 relative">
+                      <input type="text" x-model="item.particular" @input="onParticularInput(idx)" @focus="activeSuggestIdx = idx"
+                             placeholder="Item / service name"
+                             class="w-full border-0 border-b border-transparent focus:border-blue-300 focus:outline-none bg-transparent dark:text-slate-100">
+                      <p class="text-[10px] text-slate-400 dark:text-slate-500" x-show="item.category && item.category !== 'Other'" x-text="item.category"></p>
+                      <div x-show="activeSuggestIdx === idx && suggestions.length"
+                           @click.outside="activeSuggestIdx = null"
+                           class="no-print absolute z-20 left-0 top-full mt-1 w-56 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg text-xs overflow-hidden">
+                        <template x-for="s in suggestions" :key="s.particular">
+                          <div @click="applySuggestion(idx, s)" class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-slate-600 cursor-pointer flex justify-between">
+                            <span x-text="s.particular"></span>
+                            <span class="text-slate-400 dark:text-slate-400" x-text="'₹'+s.rate"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </td>
+                    <td class="p-2">
+                      <input type="number" x-model.number="item.rate" @input="onRateQtyInput(idx)"
+                             class="w-full border-0 focus:outline-none bg-transparent text-center dark:text-slate-100">
+                    </td>
+                    <td class="p-2">
+                      <input type="number" x-model.number="item.qty" @input="onRateQtyInput(idx)"
+                             class="w-full border-0 focus:outline-none bg-transparent text-center dark:text-slate-100">
+                    </td>
+                    <td class="p-2 font-medium text-center" x-text="(item.rate*item.qty).toFixed(2)"></td>
+                    <td class="p-2 text-center no-print">
+                      <button @click="removeItem(idx)" class="text-slate-400 hover:text-red-500">🗑</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <button @click="addItem()"
+                  class="no-print w-full mt-4 border-2 border-dashed border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-50 dark:hover:bg-blue-950">
+            ＋ Add new line item
+          </button>
+
+          <!-- Discount + GST -->
+          <div class="no-print mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Discount</p>
+              <div class="flex gap-1.5">
+                <button @click="bill.discount_type='flat'" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="bill.discount_type==='flat' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">₹ Flat</button>
+                <button @click="bill.discount_type='percent'" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="bill.discount_type==='percent' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">% Percent</button>
+              </div>
+            </div>
+            <input type="number" x-model.number="bill.discount_value" min="0"
+                   class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                   placeholder="0">
+
+            <div class="flex items-center justify-between pt-1">
+              <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">GST</p>
+              <button @click="bill.tax_enabled = !bill.tax_enabled" class="pill px-3 py-1 text-[11px] font-semibold" :class="bill.tax_enabled ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">
+                <span x-text="bill.tax_enabled ? 'Enabled' : 'Add GST'"></span>
+              </button>
+            </div>
+            <div x-show="bill.tax_enabled" class="space-y-2">
+              <div class="flex gap-1.5">
+                <button @click="bill.tax_mode='gst'" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="bill.tax_mode==='gst' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">CGST+SGST</button>
+                <button @click="bill.tax_mode='igst'" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="bill.tax_mode==='igst' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">IGST</button>
+              </div>
+              <div x-show="bill.tax_mode==='gst'" class="grid grid-cols-2 gap-2">
+                <input type="number" x-model.number="bill.cgst_rate" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm" placeholder="CGST %">
+                <input type="number" x-model.number="bill.sgst_rate" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm" placeholder="SGST %">
+              </div>
+              <input x-show="bill.tax_mode==='igst'" type="number" x-model.number="bill.igst_rate" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm" placeholder="IGST %">
+            </div>
+          </div>
+
+          <!-- Totals breakdown -->
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-1.5 text-sm">
+            <div class="flex justify-between text-slate-500 dark:text-slate-400"><span>Subtotal</span><span x-text="'₹'+subtotal.toFixed(2)"></span></div>
+            <div class="flex justify-between text-red-500" x-show="discountAmount > 0"><span>Discount</span><span x-text="'-₹'+discountAmount.toFixed(2)"></span></div>
+            <div class="flex justify-between text-slate-500 dark:text-slate-400" x-show="bill.tax_enabled"><span x-text="bill.tax_mode==='igst' ? 'IGST' : 'CGST+SGST'"></span><span x-text="'₹'+taxAmount.toFixed(2)"></span></div>
+            <div class="flex justify-between font-bold text-blue-800 dark:text-blue-300 text-base pt-1"><span>TOTAL</span><span x-text="'₹'+total.toFixed(2)"></span></div>
+          </div>
+        </div>
+
+        <!-- Payment -->
+        <div class="print-card bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+            <button @click="bill.payment_mode='Cash'"
+                    :class="bill.payment_mode==='Cash' ? 'bg-green-600 text-white' : 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900'"
+                    class="pill py-2.5 text-sm font-semibold">💵 Cash</button>
+            <button @click="bill.payment_mode='Online'"
+                    :class="bill.payment_mode==='Online' ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900'"
+                    class="pill py-2.5 text-sm font-semibold">💳 Online</button>
+          </div>
+
+          <!-- UPI QR (Online payment) -->
+          <div x-show="bill.payment_mode === 'Online'" class="print-card">
+            <template x-if="settings.upi_id">
+              <div class="rounded-2xl border border-blue-100 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30 p-4 sm:p-5 space-y-4">
+                <div>
+                  <p class="text-sm font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    Scan to Pay (UPI)
+                  </p>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pay via Google Pay, PhonePe, Paytm, BHIM</p>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl p-3.5 space-y-2 text-sm">
+                  <p class="flex items-center gap-2 font-semibold"><span>🏢</span><span x-text="settings.company_name"></span></p>
+                  <p class="flex items-center gap-2 text-slate-600 dark:text-slate-300"><span>👤</span><span x-text="bill.customer_name || 'Walk-in Customer'"></span></p>
+                  <p class="flex items-center gap-2"><span>📱</span><span class="pill bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium" x-text="settings.upi_id"></span></p>
+                  <p class="flex items-center gap-2 font-bold text-blue-700 dark:text-blue-300"><span>₹</span><span>Amount: ₹<span x-text="qrAmount.toFixed(0)"></span></span></p>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl p-4 flex flex-col items-center gap-3">
+                  <img :src="upiQrImg" width="200" height="200" alt="UPI QR code" class="rounded-lg" loading="lazy">
+                  <span class="pill bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 font-bold text-base px-4 py-1">₹<span x-text="qrAmount.toFixed(0)"></span></span>
+                  <button @click="refreshQr()" class="no-print pill bg-blue-600 text-white text-xs font-semibold px-4 py-2 flex items-center gap-1.5">🔄 Refresh QR</button>
+                </div>
+              </div>
+            </template>
+            <template x-if="!settings.upi_id">
+              <p class="no-print text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900 rounded-xl p-3">Add your UPI ID in Settings to show a scan-to-pay QR here.</p>
+            </template>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 no-print">
+            <button @click="bill.payment_status='Paid'" class="pill py-2 text-xs font-semibold" :class="bill.payment_status==='Paid' ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">Paid</button>
+            <button @click="bill.payment_status='Partial'" class="pill py-2 text-xs font-semibold" :class="bill.payment_status==='Partial' ? 'bg-yellow-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">Partial</button>
+            <button @click="bill.payment_status='Unpaid'" class="pill py-2 text-xs font-semibold" :class="bill.payment_status==='Unpaid' ? 'bg-red-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">Unpaid</button>
+          </div>
+          <div x-show="bill.payment_status==='Partial'" class="no-print">
+            <span class="text-xs text-slate-500 dark:text-slate-400">Amount received</span>
+            <input type="number" x-model.number="bill.paid_amount" min="0"
+                   class="w-full mt-1 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm">
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Payment: <span class="font-semibold" x-text="bill.payment_mode"></span> · Status: <span class="font-semibold" x-text="bill.payment_status"></span>
+            <span x-show="dueAmount > 0"> · Due: <span class="font-semibold text-red-500" x-text="'₹'+dueAmount.toFixed(2)"></span></span>
+          </p>
+          <textarea x-model="bill.notes" placeholder="Notes / terms (optional)" rows="2"
+                    class="no-print w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"></textarea>
+        </div>
+
+        <!-- AMC / recurring service scheduling -->
+        <div class="no-print bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-semibold text-sm">📅 Schedule next-service reminder</p>
+              <p class="text-xs text-slate-400 dark:text-slate-500">Automatically remind this customer when their next AC service is due</p>
+            </div>
+            <button @click="bill.schedule_amc = !bill.schedule_amc" class="pill px-3 py-1.5 text-xs font-semibold shrink-0 ml-2"
+                    :class="bill.schedule_amc ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">
+              <span x-text="bill.schedule_amc ? 'On' : 'Off'"></span>
+            </button>
+          </div>
+          <div x-show="bill.schedule_amc" class="mt-3 flex gap-2">
+            <template x-for="m in [3,6,12]" :key="m">
+              <button @click="bill.amc_frequency_months = m" class="pill px-3 py-1.5 text-xs font-semibold flex-1"
+                      :class="bill.amc_frequency_months === m ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">
+                <span x-text="m + ' months'"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Footer note -->
+        <div class="print-card bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 text-center space-y-2 transition-colors">
+          <p class="text-sm text-slate-500 dark:text-slate-400" x-text="settings.footer_note"></p>
+          <p x-show="settings.upi_id" class="text-xs text-slate-400 dark:text-slate-500">UPI: <span x-text="settings.upi_id"></span></p>
+          <p class="pill bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 inline-block px-4 py-1.5 text-sm font-semibold">✧ <span x-text="settings.company_name"></span> ✧</p>
+        </div>
+
+        <!-- Save / actions -->
+        <div class="no-print grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          <button @click="saveBill()" :disabled="saving"
+                  class="pill bg-blue-600 text-white py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 col-span-2 sm:col-span-1">
+            <span x-show="!saving" x-text="editingBillId ? '💾 Update' : '💾 Save Bill'"></span>
+            <span x-show="saving">Saving...</span>
+          </button>
+          <button @click="downloadPdf(savedBillId)" :disabled="!savedBillId"
+                  class="pill bg-slate-700 text-white py-3 text-sm font-semibold hover:bg-slate-800 disabled:opacity-40">📄 PDF</button>
+          <button @click="window.print()" :disabled="!savedBillId"
+                  class="pill bg-indigo-600 text-white py-3 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40">🖨 Print</button>
+          <button @click="whatsappShare()" :disabled="!savedBillId"
+                  class="pill bg-green-600 text-white py-3 text-sm font-semibold hover:bg-green-700 disabled:opacity-40">🟢 Share</button>
+        </div>
+        <div class="no-print grid grid-cols-2 gap-2.5 sm:gap-3">
+          <button @click="emailBill()" :disabled="!savedBillId || emailingBill"
+                  class="pill bg-sky-600 text-white py-3 text-sm font-semibold hover:bg-sky-700 disabled:opacity-40">
+            <span x-show="!emailingBill">✉️ Email Invoice</span>
+            <span x-show="emailingBill">Sending...</span>
+          </button>
+          <button @click="smsBill()" :disabled="!savedBillId || smsingBill"
+                  class="pill bg-purple-600 text-white py-3 text-sm font-semibold hover:bg-purple-700 disabled:opacity-40">
+            <span x-show="!smsingBill">💬 SMS Invoice</span>
+            <span x-show="smsingBill">Sending...</span>
+          </button>
+        </div>
+
+        <button @click="newBill()" class="no-print w-full text-xs text-slate-400 dark:text-slate-500 underline py-2">Start a fresh bill</button>
+
+        <p x-show="message" x-text="message" class="text-center text-sm font-medium" :class="messageOk ? 'text-green-600 dark:text-green-400' : 'text-red-500'"></p>
+      </div>
+    </template>
+
+    <!-- ============ HISTORY VIEW ============ -->
+    <template x-if="view === 'history'">
+      <div class="space-y-3">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400">Bill History</h2>
+          <input type="text" x-model="historySearch" @input.debounce.300ms="loadHistory(1)"
+                 placeholder="Search by bill no. or customer name..."
+                 class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+          <div class="grid grid-cols-2 gap-2">
+            <input type="date" x-model="historyFilters.from" @change="loadHistory(1)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-xs">
+            <input type="date" x-model="historyFilters.to" @change="loadHistory(1)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-xs">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <select x-model="historyFilters.payment_mode" @change="loadHistory(1)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-xs">
+              <option value="">All modes</option>
+              <option value="Cash">Cash</option>
+              <option value="Online">Online</option>
+            </select>
+            <select x-model="historyFilters.status" @change="loadHistory(1)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-xl px-3 py-2 text-xs">
+              <option value="">All status</option>
+              <option value="Paid">Paid</option>
+              <option value="Partial">Partial</option>
+              <option value="Unpaid">Unpaid</option>
+            </select>
+          </div>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <template x-for="b in history" :key="b.id">
+            <div class="border border-slate-100 dark:border-slate-700 rounded-xl p-3 mb-2 text-sm flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700/50">
+              <div class="min-w-0 cursor-pointer" @click="editBill(b.id)">
+                <div class="flex items-center gap-1.5">
+                  <p class="font-semibold truncate" x-text="b.bill_no + ' - ' + (b.customer_name || 'Walk-in')"></p>
+                  <span class="pill text-[10px] font-bold px-2 py-0.5 shrink-0"
+                        :class="b.payment_status==='Paid' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' : (b.payment_status==='Partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300' : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300')"
+                        x-text="b.payment_status"></span>
+                </div>
+                <p class="text-xs text-slate-400 dark:text-slate-500" x-text="b.bill_date + ' · ₹' + b.total_amount.toFixed(2) + ' · ' + b.payment_mode"></p>
+              </div>
+              <div class="flex items-center gap-3 shrink-0 ml-2">
+                <button @click="downloadPdf(b.id)" class="text-blue-600 dark:text-blue-400 text-xs font-semibold">PDF</button>
+                <button @click="deleteBill(b.id)" class="text-red-400 hover:text-red-600 text-xs">🗑</button>
+              </div>
+            </div>
+          </template>
+          <p x-show="!history.length" class="text-sm text-slate-400 dark:text-slate-500">No bills found.</p>
+
+          <div class="flex items-center justify-between mt-3" x-show="historyPages > 1">
+            <button @click="loadHistory(historyPage - 1)" :disabled="historyPage <= 1" class="pill px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700 disabled:opacity-40">← Prev</button>
+            <span class="text-xs text-slate-400" x-text="'Page ' + historyPage + ' / ' + historyPages"></span>
+            <button @click="loadHistory(historyPage + 1)" :disabled="historyPage >= historyPages" class="pill px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700 disabled:opacity-40">Next →</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ============ AMC / REMINDERS VIEW ============ -->
+    <template x-if="view === 'amc'">
+      <div class="space-y-3">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">🔔 Service Reminders (AMC)</h2>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Customers due for their next AC service, and manual reminder scheduling.</p>
+        </div>
+
+        <!-- Add new reminder -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-2.5 transition-colors">
+          <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Add Reminder</h3>
+          <input type="text" x-model="newAmc.customer_name" placeholder="Customer name"
+                 class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="newAmc.customer_phone" placeholder="Phone"
+                   class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            <input type="email" x-model="newAmc.customer_email" placeholder="Email"
+                   class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="newAmc.service_type" placeholder="Service type (e.g. AC Service)"
+                   class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            <select x-model.number="newAmc.frequency_months" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+              <option :value="3">Every 3 months</option>
+              <option :value="6">Every 6 months</option>
+              <option :value="12">Every 12 months</option>
+            </select>
+          </div>
+          <button @click="addAmc()" class="w-full bg-amber-500 text-white pill py-2.5 text-sm font-semibold">＋ Add Reminder</button>
+        </div>
+
+        <!-- Due list -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Due / Upcoming</h3>
+            <div class="flex gap-1.5">
+              <button @click="amcFilter='due'; loadAmc()" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="amcFilter==='due' ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">Due soon</button>
+              <button @click="amcFilter='all'; loadAmc()" class="pill px-2.5 py-1 text-[11px] font-semibold" :class="amcFilter==='all' ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'">All</button>
+            </div>
+          </div>
+          <template x-for="r in amcList" :key="r.id">
+            <div class="border border-slate-100 dark:border-slate-700 rounded-xl p-3 mb-2 text-sm">
+              <div class="flex justify-between items-start gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <p class="font-semibold truncate" x-text="r.customer_name"></p>
+                    <span x-show="r.overdue" class="pill bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px] font-bold px-2 py-0.5">Overdue</span>
+                  </div>
+                  <p class="text-xs text-slate-400 dark:text-slate-500" x-text="r.service_type + ' · due ' + r.next_service_date"></p>
+                  <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5" x-text="[r.customer_phone, r.customer_email].filter(Boolean).join(' · ')"></p>
+                </div>
+                <button @click="deleteAmc(r.id)" class="text-red-400 hover:text-red-600 shrink-0">🗑</button>
+              </div>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <button @click="markAmcDone(r.id)" class="pill bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-[11px] font-semibold px-3 py-1.5">✓ Mark serviced</button>
+                <button @click="remindAmc(r.id, 'email')" :disabled="!r.customer_email" class="pill bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40">✉️ Email reminder</button>
+                <button @click="remindAmc(r.id, 'sms')" :disabled="!r.customer_phone" class="pill bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40">💬 SMS reminder</button>
+              </div>
+            </div>
+          </template>
+          <p x-show="!amcList.length" class="text-sm text-slate-400 dark:text-slate-500">No reminders here — add one above, or tick "Schedule next-service reminder" while making a bill.</p>
+          <p x-show="amcMessage" x-text="amcMessage" class="text-center text-sm font-medium text-blue-600 dark:text-blue-400 mt-2"></p>
+        </div>
+      </div>
+    </template>
+
+    <!-- ============ INSIGHTS VIEW (AI analytics) ============ -->
+    <template x-if="view === 'insights'">
+      <div class="space-y-3">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">✨ AI Insights</h2>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Revenue trend and top performers, generated from your billing history.</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3">Last 6 Months Revenue</h3>
+          <div class="flex items-end justify-between gap-2 h-36">
+            <template x-for="m in analytics.monthly_revenue || []" :key="m.label">
+              <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                <span class="text-[10px] text-slate-500 dark:text-slate-400" x-text="m.value ? '₹'+Math.round(m.value) : ''"></span>
+                <div class="w-full bg-blue-500 dark:bg-blue-600 rounded-t-md" :style="'height:' + barHeight(m.value) + '%'"></div>
+                <span class="text-[10px] text-slate-400" x-text="m.label"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+            <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Top Items</h3>
+            <template x-for="it in analytics.top_items || []" :key="it.name">
+              <div class="flex justify-between text-sm py-1.5 border-b border-slate-50 dark:border-slate-700 last:border-0">
+                <span class="truncate" x-text="it.name"></span>
+                <span class="font-semibold text-green-600 dark:text-green-400 shrink-0 ml-2" x-text="'₹'+it.amount.toFixed(0)"></span>
+              </div>
+            </template>
+            <p x-show="!(analytics.top_items && analytics.top_items.length)" class="text-xs text-slate-400">No data yet.</p>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+            <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Top Customers</h3>
+            <template x-for="c in analytics.top_customers || []" :key="c.name">
+              <div class="flex justify-between text-sm py-1.5 border-b border-slate-50 dark:border-slate-700 last:border-0">
+                <span class="truncate" x-text="c.name"></span>
+                <span class="font-semibold text-green-600 dark:text-green-400 shrink-0 ml-2" x-text="'₹'+c.amount.toFixed(0)"></span>
+              </div>
+            </template>
+            <p x-show="!(analytics.top_customers && analytics.top_customers.length)" class="text-xs text-slate-400">No data yet.</p>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Service Category Mix</h3>
+          <template x-for="c in analytics.top_categories || []" :key="c.name">
+            <div class="mb-2">
+              <div class="flex justify-between text-xs mb-1"><span x-text="c.name"></span><span x-text="'₹'+c.amount.toFixed(0)"></span></div>
+              <div class="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" :style="'width:' + categoryPct(c.amount) + '%'"></div>
+              </div>
+            </div>
+          </template>
+          <p x-show="!(analytics.top_categories && analytics.top_categories.length)" class="text-xs text-slate-400">No data yet.</p>
+        </div>
+      </div>
+    </template>
+
+    <!-- ============ SETTINGS VIEW ============ -->
+    <template x-if="view === 'settings'">
+      <div class="space-y-3">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">Company Settings</h2>
+          <template x-for="field in ['company_name','owner_name','address','phone','email','gst_number','upi_id','footer_note','bill_prefix']" :key="field">
+            <div>
+              <label class="text-xs text-slate-500 dark:text-slate-400 capitalize" x-text="field.replace(/_/g,' ')"></label>
+              <input type="text" x-model="settings[field]" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            </div>
+          </template>
+          <button @click="saveSettings()" class="w-full bg-blue-600 text-white pill py-2.5 text-sm font-semibold mt-2">Save Settings</button>
+          <p x-show="settingsMessage" x-text="settingsMessage" class="text-center text-sm font-medium text-green-600 dark:text-green-400"></p>
+        </div>
+
+        <!-- Email (SMTP) delivery settings -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">✉️ Email Delivery (SMTP)</h2>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Needed to email invoices and reminders. For Gmail, use an App Password, not your normal password.</p>
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="settings.smtp_host" placeholder="SMTP host (e.g. smtp.gmail.com)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            <input type="text" x-model="settings.smtp_port" placeholder="Port (e.g. 587)" class="border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <input type="text" x-model="settings.smtp_user" placeholder="SMTP username / email" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <input type="password" x-model="settings.smtp_password" placeholder="SMTP password / app password" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <input type="text" x-model="settings.smtp_from_name" placeholder="From name shown to customers" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <button @click="saveSettings()" class="w-full bg-sky-600 text-white pill py-2.5 text-sm font-semibold">Save Email Settings</button>
+        </div>
+
+        <!-- SMS gateway settings -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">💬 SMS Gateway</h2>
+          <p class="text-xs text-slate-400 dark:text-slate-500">Works with Fast2SMS/MSG91-style providers. Sign up with a provider first, then paste the API URL and key here.</p>
+          <input type="text" x-model="settings.sms_api_url" placeholder="SMS API URL" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <input type="text" x-model="settings.sms_api_key" placeholder="API key" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <input type="text" x-model="settings.sms_sender_id" placeholder="Sender ID (optional)" class="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+          <button @click="saveSettings()" class="w-full bg-purple-600 text-white pill py-2.5 text-sm font-semibold">Save SMS Settings</button>
+        </div>
+
+        <!-- Item catalog / master -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3 transition-colors">
+          <h2 class="font-bold text-blue-700 dark:text-blue-400 mb-1">Item Master</h2>
+          <div class="flex gap-2">
+            <input type="text" x-model="newCatalogItem.particular" placeholder="Item name" class="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            <input type="number" x-model.number="newCatalogItem.rate" placeholder="Rate" class="w-20 border border-slate-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-sm">
+            <button @click="addCatalogItem()" class="pill bg-blue-600 text-white px-4 text-sm font-semibold">Add</button>
+          </div>
+          <template x-for="c in catalog" :key="c.id">
+            <div class="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-700 last:border-0 text-sm">
+              <div class="min-w-0">
+                <p class="truncate" x-text="c.particular"></p>
+                <p class="text-[10px] text-slate-400" x-text="c.category"></p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0 ml-2">
+                <span class="font-semibold" x-text="'₹'+c.rate"></span>
+                <button @click="deleteCatalogItem(c.id)" class="text-red-400 hover:text-red-600">🗑</button>
+              </div>
+            </div>
+          </template>
+          <p x-show="!catalog.length" class="text-xs text-slate-400">No catalog items yet — add your common services for quick reuse.</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 flex items-center justify-between transition-colors">
+          <div>
+            <p class="font-semibold text-sm">Appearance</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500" x-text="darkMode ? 'Night mode is on' : 'Day mode is on'"></p>
+          </div>
+          <button @click="toggleDarkMode()"
+                  class="pill px-4 py-2 text-sm font-semibold"
+                  :class="darkMode ? 'bg-slate-700 text-white' : 'bg-yellow-100 text-yellow-700'">
+            <span x-text="darkMode ? '🌙 Night' : '☀️ Day'"></span>
+          </button>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 transition-colors">
+          <p class="font-semibold text-sm mb-1">Backup</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">Download every bill, item and setting as a JSON file for safekeeping.</p>
+          <button @click="exportData()" class="w-full bg-slate-700 text-white pill py-2.5 text-sm font-semibold">⬇️ Export Backup</button>
+        </div>
+      </div>
+    </template>
+
+  </div>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <div class="no-print fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+    <div class="max-w-3xl mx-auto grid grid-cols-6">
+      <button @click="view='home'" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='home' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <span class="text-lg">🏠</span>
+        <span class="text-[10px] font-semibold">Home</span>
+      </button>
+      <button @click="goToBill()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='bill' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <span class="text-lg">🧾</span>
+        <span class="text-[10px] font-semibold">Bill</span>
+      </button>
+      <button @click="view='history'; loadHistory()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='history' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[19px] h-[19px]">
+          <path d="M13 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21H15a1.5 1.5 0 0 0 1.5-1.5V13"/>
+          <path d="M13 3l4.5 4.5H14a1 1 0 0 1-1-1V3Z"/>
+          <line x1="8.7" y1="11" x2="12" y2="11"/>
+          <line x1="8.7" y1="14" x2="11" y2="14"/>
+          <line x1="8.7" y1="17" x2="10.3" y2="17"/>
+          <circle cx="17.5" cy="16.5" r="4" fill="currentColor" fill-opacity="0.08"/>
+          <circle cx="17.5" cy="16.5" r="4"/>
+          <path d="M17.5 14.6v1.9l1.3 1"/>
+        </svg>
+        <span class="text-[10px] font-semibold">History</span>
+      </button>
+      <button @click="view='amc'; loadAmc()" class="flex flex-col items-center py-2.5 gap-0.5 relative" :class="view==='amc' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <span class="text-lg">🔔</span>
+        <span x-show="amcDueCount > 0" class="absolute top-1 right-[calc(50%-14px)] w-2 h-2 rounded-full bg-red-500"></span>
+        <span class="text-[10px] font-semibold">Reminders</span>
+      </button>
+      <button @click="view='insights'; loadAnalytics()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='insights' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <span class="text-lg">✨</span>
+        <span class="text-[10px] font-semibold">Insights</span>
+      </button>
+      <button @click="view='settings'" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='settings' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
+        <span class="text-lg">⚙️</span>
+        <span class="text-[10px] font-semibold">Settings</span>
+      </button>
+    </div>
+  </div>
+
+<script>
+function billingApp() {
+  return {
+    view: 'home',
+    darkMode: false,
+    settings: {{ settings | tojson }},
+    today: "{{ today }}",
+    stats: {},
+    analytics: {},
+    bill: {
+      bill_no: "{{ next_bill_no }}",
+      date: "{{ today }}",
+      customer_name: "",
+      customer_address: "",
+      customer_phone: "",
+      customer_email: "",
+      payment_mode: "Cash",
+      discount_type: "flat",
+      discount_value: 0,
+      tax_enabled: false,
+      tax_mode: "gst",
+      cgst_rate: 9,
+      sgst_rate: 9,
+      igst_rate: 18,
+      payment_status: "Paid",
+      paid_amount: 0,
+      notes: "",
+      schedule_amc: false,
+      amc_frequency_months: 6,
+    },
+    items: [{ particular: "", category: "", rate: 0, qty: 1 }],
+    suggestions: [],
+    activeSuggestIdx: null,
+    customerSuggestions: [],
+    showCustomerSuggest: false,
+    aiText: "",
+    aiLoading: false,
+    listening: false,
+    voiceSupported: false,
+    saving: false,
+    savedBillId: null,
+    editingBillId: null,
+    message: "",
+    messageOk: true,
+    emailingBill: false,
+    smsingBill: false,
+    history: [],
+    historySearch: "",
+    historyFilters: { from: "", to: "", payment_mode: "", status: "" },
+    historyPage: 1,
+    historyPages: 1,
+    settingsMessage: "",
+    catalog: [],
+    newCatalogItem: { particular: "", rate: 0 },
+    qrRefreshKey: 0,
+    amcList: [],
+    amcDueCount: 0,
+    amcFilter: "due",
+    amcMessage: "",
+    newAmc: { customer_name: "", customer_phone: "", customer_email: "", service_type: "AC Service", frequency_months: 6 },
+
+    init() {
+      this.darkMode = localStorage.getItem('aircoolax_theme') === 'dark';
+      this.voiceSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      this.loadStats();
+      this.loadAnalytics();
+      this.loadCatalog();
+      this.loadAmcDueCount();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    },
+
+    toggleDarkMode() {
+      this.darkMode = !this.darkMode;
+      localStorage.setItem('aircoolax_theme', this.darkMode ? 'dark' : 'light');
+    },
+
+    // ---- live totals (mirrors backend compute_bill_amounts) ----
+    get subtotal() {
+      return this.items.reduce((s, i) => s + (Number(i.rate) || 0) * (Number(i.qty) || 0), 0);
+    },
+    get discountAmount() {
+      const v = Number(this.bill.discount_value) || 0;
+      let d = this.bill.discount_type === 'percent' ? (this.subtotal * v / 100) : v;
+      return Math.max(0, Math.min(d, this.subtotal));
+    },
+    get taxAmount() {
+      if (!this.bill.tax_enabled) return 0;
+      const taxable = this.subtotal - this.discountAmount;
+      const rate = this.bill.tax_mode === 'igst' ? (Number(this.bill.igst_rate) || 0) : ((Number(this.bill.cgst_rate) || 0) + (Number(this.bill.sgst_rate) || 0));
+      return taxable * rate / 100;
+    },
+    get total() {
+      return this.subtotal - this.discountAmount + this.taxAmount;
+    },
+    get dueAmount() {
+      if (this.bill.payment_status === 'Paid') return 0;
+      if (this.bill.payment_status === 'Unpaid') return this.total;
+      return Math.max(0, this.total - (Number(this.bill.paid_amount) || 0));
+    },
+    get qrAmount() {
+      return this.bill.payment_status === 'Partial' ? this.dueAmount : this.total;
+    },
+    get upiUri() {
+      if (!this.settings.upi_id) return '';
+      const pn = this.settings.company_name || 'Merchant';
+      const tn = 'Bill ' + (this.bill.bill_no || '');
+      return `upi://pay?pa=${encodeURIComponent(this.settings.upi_id)}&pn=${encodeURIComponent(pn)}&am=${this.qrAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(tn)}`;
+    },
+    get upiQrImg() {
+      if (!this.upiUri) return '';
+      return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(this.upiUri)}&t=${this.qrRefreshKey}`;
+    },
+    refreshQr() { this.qrRefreshKey++; },
+
+    barHeight(v) {
+      const max = Math.max(1, ...(this.analytics.monthly_revenue || []).map(m => m.value));
+      return Math.max(4, Math.round((v / max) * 100));
+    },
+    categoryPct(v) {
+      const max = Math.max(1, ...(this.analytics.top_categories || []).map(c => c.amount));
+      return Math.max(3, Math.round((v / max) * 100));
+    },
+
+    goToBill() { this.view = 'bill'; },
+
+    newBill() {
+      this.savedBillId = null;
+      this.editingBillId = null;
+      this.bill.customer_name = "";
+      this.bill.customer_address = "";
+      this.bill.customer_phone = "";
+      this.bill.customer_email = "";
+      this.bill.payment_mode = "Cash";
+      this.bill.discount_type = "flat";
+      this.bill.discount_value = 0;
+      this.bill.tax_enabled = false;
+      this.bill.payment_status = "Paid";
+      this.bill.paid_amount = 0;
+      this.bill.notes = "";
+      this.bill.schedule_amc = false;
+      this.bill.amc_frequency_months = 6;
+      this.items = [{ particular: "", category: "", rate: 0, qty: 1 }];
+      fetch('/api/next-bill-no').then(r => r.json()).then(d => { this.bill.bill_no = d.bill_no; this.bill.date = d.date; });
+    },
+
+    async editBill(id) {
+      const res = await fetch('/api/bills/' + id);
+      const data = await res.json();
+      if (data.error) return;
+      const b = data.bill;
+      this.editingBillId = id;
+      this.savedBillId = id;
+      this.bill = {
+        bill_no: b.bill_no, date: b.bill_date, customer_name: b.customer_name || "",
+        customer_address: b.customer_address || "", customer_phone: b.customer_phone || "",
+        customer_email: b.customer_email || "",
+        payment_mode: b.payment_mode, discount_type: b.discount_type || 'flat', discount_value: b.discount_value || 0,
+        tax_enabled: !!b.tax_enabled, tax_mode: b.tax_mode || 'gst', cgst_rate: b.cgst_rate || 9,
+        sgst_rate: b.sgst_rate || 9, igst_rate: b.igst_rate || 18, payment_status: b.payment_status || 'Paid',
+        paid_amount: b.paid_amount || 0, notes: b.notes || "",
+        schedule_amc: false, amc_frequency_months: 6,
+      };
+      this.items = data.items.map(i => ({ particular: i.particular, category: i.category, rate: i.rate, qty: i.qty }));
+      this.view = 'bill';
+    },
+
+    addItem() { this.items.push({ particular: "", category: "", rate: 0, qty: 1 }); },
+    removeItem(idx) {
+      if (this.items.length === 1) { this.items[0] = { particular: "", category: "", rate: 0, qty: 1 }; return; }
+      this.items.splice(idx, 1);
+    },
+    onRateQtyInput() {},
+
+    async onParticularInput(idx) {
+      const q = this.items[idx].particular;
+      this.activeSuggestIdx = idx;
+      const res = await fetch('/api/suggest?q=' + encodeURIComponent(q));
+      this.suggestions = await res.json();
+    },
+    applySuggestion(idx, s) {
+      this.items[idx].particular = s.particular;
+      this.items[idx].rate = s.rate;
+      this.activeSuggestIdx = null;
+    },
+
+    async onCustomerInput() {
+      const q = this.bill.customer_name;
+      this.showCustomerSuggest = true;
+      if (!q || q.length < 2) { this.customerSuggestions = []; return; }
+      const res = await fetch('/api/customers?q=' + encodeURIComponent(q));
+      this.customerSuggestions = await res.json();
+    },
+    applyCustomer(c) {
+      this.bill.customer_name = c.customer_name;
+      this.bill.customer_address = c.customer_address || "";
+      this.bill.customer_phone = c.customer_phone || "";
+      this.bill.customer_email = c.customer_email || "";
+      this.showCustomerSuggest = false;
+    },
+
+    startVoice() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      const rec = new SR();
+      rec.lang = 'en-IN';
+      rec.interimResults = false;
+      rec.onstart = () => { this.listening = true; };
+      rec.onend = () => { this.listening = false; };
+      rec.onerror = () => { this.listening = false; };
+      rec.onresult = (e) => {
+        this.aiText = e.results[0][0].transcript;
+        this.aiParse();
+      };
+      rec.start();
+    },
+
+    async aiParse() {
+      if (!this.aiText.trim()) return;
+      this.aiLoading = true;
+      try {
+        const res = await fetch('/api/parse', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: this.aiText })
+        });
+        const data = await res.json();
+        if (data.items && data.items.length) {
+          if (this.items.length === 1 && !this.items[0].particular) this.items = [];
+          data.items.forEach(it => this.items.push({ particular: it.particular, category: it.category, rate: it.rate, qty: it.qty }));
+          this.aiText = "";
+        }
+      } finally { this.aiLoading = false; }
+    },
+
+    async saveBill() {
+      const validItems = this.items.filter(i => i.particular && i.particular.trim());
+      if (!validItems.length) { this.flash('Add at least one item', false); return; }
+      this.saving = true;
+      try {
+        const payload = {
+          bill_no: this.bill.bill_no, date: this.bill.date,
+          customer_name: this.bill.customer_name, customer_address: this.bill.customer_address,
+          customer_phone: this.bill.customer_phone, customer_email: this.bill.customer_email,
+          payment_mode: this.bill.payment_mode,
+          discount_type: this.bill.discount_type, discount_value: this.bill.discount_value,
+          tax_enabled: this.bill.tax_enabled, tax_mode: this.bill.tax_mode,
+          cgst_rate: this.bill.cgst_rate, sgst_rate: this.bill.sgst_rate, igst_rate: this.bill.igst_rate,
+          payment_status: this.bill.payment_status, paid_amount: this.bill.paid_amount,
+          notes: this.bill.notes, items: validItems,
+          schedule_amc: this.bill.schedule_amc, amc_frequency_months: this.bill.amc_frequency_months,
+        };
+        const url = this.editingBillId ? '/api/bills/' + this.editingBillId : '/api/bills';
+        const method = this.editingBillId ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (data.ok) {
+          this.savedBillId = data.bill_id;
+          this.flash((this.editingBillId ? 'Bill updated!' : 'Bill ' + data.bill_no + ' saved successfully!'), true);
+          this.loadStats();
+          this.loadAnalytics();
+          this.loadAmcDueCount();
+        } else {
+          this.flash(data.error || 'Could not save bill', false);
+        }
+      } finally { this.saving = false; }
+    },
+
+    downloadPdf(id) {
+      if (id) window.open('/api/bills/' + id + '/pdf', '_blank');
+    },
+
+    async emailBill() {
+      if (!this.savedBillId) return;
+      const email = this.bill.customer_email || prompt('Send invoice to which email address?');
+      if (!email) return;
+      this.bill.customer_email = email;
+      this.emailingBill = true;
+      try {
+        const res = await fetch('/api/bills/' + this.savedBillId + '/email', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        this.flash(data.ok ? 'Invoice emailed to ' + email + '!' : (data.error || 'Could not send email'), !!data.ok);
+      } finally { this.emailingBill = false; }
+    },
+
+    async smsBill() {
+      if (!this.savedBillId) return;
+      const phone = this.bill.customer_phone || prompt('Send SMS to which phone number?');
+      if (!phone) return;
+      this.smsingBill = true;
+      try {
+        const res = await fetch('/api/bills/' + this.savedBillId + '/sms', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        this.flash(data.ok ? 'SMS sent to ' + phone + '!' : (data.error || 'Could not send SMS'), !!data.ok);
+      } finally { this.smsingBill = false; }
+    },
+
+    whatsappShare() {
+      if (!this.savedBillId) return;
+      const lines = this.items.filter(i=>i.particular).map(i => `${i.particular} x${i.qty} - ₹${(i.rate*i.qty).toFixed(2)}`);
+      let text = `*${this.settings.company_name}*\nBill No: ${this.bill.bill_no}\nDate: ${this.bill.date}\nCustomer: ${this.bill.customer_name || '-'}\n\n${lines.join('\n')}\n\n*Total: ₹${this.total.toFixed(2)}*\nPayment: ${this.bill.payment_mode} (${this.bill.payment_status})`;
+      if (this.dueAmount > 0) text += `\nDue: ₹${this.dueAmount.toFixed(2)}`;
+      const phone = (this.bill.customer_phone || '').replace(/\D/g, '');
+      const base = phone ? `https://wa.me/${phone}` : 'https://wa.me/';
+      window.open(base + '?text=' + encodeURIComponent(text), '_blank');
+    },
+
+    async loadHistory(page) {
+      this.historyPage = page && page > 0 ? page : 1;
+      const params = new URLSearchParams({ page: this.historyPage, per_page: 20 });
+      if (this.historySearch) params.set('q', this.historySearch);
+      if (this.historyFilters.from) params.set('from', this.toDdMmYyyy(this.historyFilters.from));
+      if (this.historyFilters.to) params.set('to', this.toDdMmYyyy(this.historyFilters.to));
+      if (this.historyFilters.payment_mode) params.set('payment_mode', this.historyFilters.payment_mode);
+      if (this.historyFilters.status) params.set('status', this.historyFilters.status);
+      const res = await fetch('/api/bills?' + params.toString());
+      const data = await res.json();
+      this.history = data.bills || [];
+      this.historyPages = data.pages || 1;
+    },
+    toDdMmYyyy(isoDate) {
+      const [y, m, d] = isoDate.split('-');
+      return `${d}/${m}/${y}`;
+    },
+
+    async deleteBill(id) {
+      if (!confirm('Delete this bill? This cannot be undone.')) return;
+      await fetch('/api/bills/' + id, { method: 'DELETE' });
+      this.loadHistory(this.historyPage);
+      this.loadStats();
+      this.loadAnalytics();
+    },
+
+    async loadStats() {
+      const res = await fetch('/api/stats');
+      this.stats = await res.json();
+    },
+
+    async loadAnalytics() {
+      const res = await fetch('/api/analytics');
+      this.analytics = await res.json();
+    },
+
+    async loadCatalog() {
+      const res = await fetch('/api/catalog');
+      this.catalog = await res.json();
+    },
+    async addCatalogItem() {
+      if (!this.newCatalogItem.particular.trim()) return;
+      await fetch('/api/catalog', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.newCatalogItem)
+      });
+      this.newCatalogItem = { particular: "", rate: 0 };
+      this.loadCatalog();
+    },
+    async deleteCatalogItem(id) {
+      await fetch('/api/catalog/' + id, { method: 'DELETE' });
+      this.loadCatalog();
+    },
+
+    // ---- AMC / recurring service reminders ----
+    async loadAmcDueCount() {
+      const res = await fetch('/api/amc/due?days=7');
+      const data = await res.json();
+      this.amcDueCount = data.length;
+    },
+    async loadAmc() {
+      const days = this.amcFilter === 'all' ? 36500 : 30;
+      const res = await fetch('/api/amc/due?days=' + days);
+      this.amcList = await res.json();
+      this.loadAmcDueCount();
+    },
+    async addAmc() {
+      if (!this.newAmc.customer_name.trim()) return;
+      await fetch('/api/amc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.newAmc) });
+      this.newAmc = { customer_name: "", customer_phone: "", customer_email: "", service_type: "AC Service", frequency_months: 6 };
+      this.loadAmc();
+    },
+    async markAmcDone(id) {
+      await fetch('/api/amc/' + id + '/mark-done', { method: 'POST' });
+      this.loadAmc();
+    },
+    async remindAmc(id, channel) {
+      const res = await fetch('/api/amc/' + id + '/remind', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel })
+      });
+      const data = await res.json();
+      this.amcMessage = data.ok ? 'Reminder sent!' : (data.error || 'Could not send reminder');
+      setTimeout(() => this.amcMessage = "", 3500);
+    },
+    async deleteAmc(id) {
+      if (!confirm('Remove this reminder?')) return;
+      await fetch('/api/amc/' + id, { method: 'DELETE' });
+      this.loadAmc();
+    },
+
+    exportData() {
+      window.open('/api/export', '_blank');
+    },
+
+    async saveSettings() {
+      const res = await fetch('/api/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.settings)
+      });
+      const data = await res.json();
+      this.settings = data.settings;
+      this.settingsMessage = 'Settings saved!';
+      setTimeout(() => this.settingsMessage = "", 3000);
+    },
+
+    flash(msg, ok) {
+      this.message = msg; this.messageOk = ok;
+      setTimeout(() => this.message = "", 4000);
+    }
+  }
+}
+</script>
+</body>
+</html>
