@@ -718,37 +718,41 @@
   <div class="no-print fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
     <div class="max-w-3xl mx-auto grid grid-cols-6">
       <button @click="view='home'" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='home' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <span class="text-lg">🏠</span>
+        <span class="w-5 h-5 flex items-center justify-center text-lg leading-none">🏠</span>
         <span class="text-[10px] font-semibold">Home</span>
       </button>
       <button @click="goToBill()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='bill' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <span class="text-lg">🧾</span>
+        <span class="w-5 h-5 flex items-center justify-center text-lg leading-none">🧾</span>
         <span class="text-[10px] font-semibold">Bill</span>
       </button>
       <button @click="view='history'; loadHistory()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='history' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[19px] h-[19px]">
-          <path d="M13 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21H15a1.5 1.5 0 0 0 1.5-1.5V13"/>
-          <path d="M13 3l4.5 4.5H14a1 1 0 0 1-1-1V3Z"/>
-          <line x1="8.7" y1="11" x2="12" y2="11"/>
-          <line x1="8.7" y1="14" x2="11" y2="14"/>
-          <line x1="8.7" y1="17" x2="10.3" y2="17"/>
-          <circle cx="17.5" cy="16.5" r="4" fill="currentColor" fill-opacity="0.08"/>
-          <circle cx="17.5" cy="16.5" r="4"/>
-          <path d="M17.5 14.6v1.9l1.3 1"/>
-        </svg>
+        <span class="w-5 h-5 flex items-center justify-center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]">
+            <path d="M13 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21H15a1.5 1.5 0 0 0 1.5-1.5V13"/>
+            <path d="M13 3l4.5 4.5H14a1 1 0 0 1-1-1V3Z"/>
+            <line x1="8.7" y1="11" x2="12" y2="11"/>
+            <line x1="8.7" y1="14" x2="11" y2="14"/>
+            <line x1="8.7" y1="17" x2="10.3" y2="17"/>
+            <circle cx="17.5" cy="16.5" r="4" fill="currentColor" fill-opacity="0.08"/>
+            <circle cx="17.5" cy="16.5" r="4"/>
+            <path d="M17.5 14.6v1.9l1.3 1"/>
+          </svg>
+        </span>
         <span class="text-[10px] font-semibold">History</span>
       </button>
       <button @click="view='amc'; loadAmc()" class="flex flex-col items-center py-2.5 gap-0.5 relative" :class="view==='amc' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <span class="text-lg">🔔</span>
-        <span x-show="amcDueCount > 0" class="absolute top-1 right-[calc(50%-14px)] w-2 h-2 rounded-full bg-red-500"></span>
+        <span class="w-5 h-5 flex items-center justify-center text-lg leading-none relative">
+          🔔
+          <span x-show="amcDueCount > 0" class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500"></span>
+        </span>
         <span class="text-[10px] font-semibold">Reminders</span>
       </button>
       <button @click="view='insights'; loadAnalytics()" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='insights' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <span class="text-lg">✨</span>
+        <span class="w-5 h-5 flex items-center justify-center text-lg leading-none">✨</span>
         <span class="text-[10px] font-semibold">Insights</span>
       </button>
       <button @click="view='settings'" class="flex flex-col items-center py-2.5 gap-0.5" :class="view==='settings' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'">
-        <span class="text-lg">⚙️</span>
+        <span class="w-5 h-5 flex items-center justify-center text-lg leading-none">⚙️</span>
         <span class="text-[10px] font-semibold">Settings</span>
       </button>
     </div>
