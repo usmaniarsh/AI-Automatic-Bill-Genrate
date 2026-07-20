@@ -1027,11 +1027,13 @@ def api_export():
 
 def build_bill_pdf(bill_id):
     """Builds the invoice PDF for a bill and returns a BytesIO buffer.
-    Shared by the direct-download endpoint and the email-invoice endpoint."""
+    Shared by the direct-download endpoint and the email-invoice endpoint.
+    Note: uses "Rs." instead of the ₹ glyph because ReportLab's built-in
+    Helvetica font has no Rupee-sign character (it renders as a black box)."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
     bill, items = fetch_bill(bill_id)
@@ -1066,23 +1068,23 @@ def build_bill_pdf(bill_id):
         Spacer(1, 14),
     ]
 
-    table_data = [["Sr", "Particular", "Rate (₹)", "Qty", "Amount (₹)"]]
+    table_data = [["Sr", "Particular", "Rate (Rs.)", "Qty", "Amount (Rs.)"]]
     for it in items:
         table_data.append([it["sr_no"], it["particular"], f"{it['rate']:.2f}", it["qty"], f"{it['amount']:.2f}"])
 
     subtotal = bill["subtotal"] if bill["subtotal"] else bill["total_amount"]
-    table_data.append(["", "", "", "Subtotal", f"₹{subtotal:.2f}"])
+    table_data.append(["", "", "", "Subtotal", f"Rs.{subtotal:.2f}"])
     if bill["discount_amount"]:
-        table_data.append(["", "", "", "Discount", f"-₹{bill['discount_amount']:.2f}"])
+        table_data.append(["", "", "", "Discount", f"-Rs.{bill['discount_amount']:.2f}"])
     if bill["tax_enabled"]:
         if bill["tax_mode"] == "igst":
-            table_data.append(["", "", "", f"IGST {bill['igst_rate']:.0f}%", f"₹{bill['tax_amount']:.2f}"])
+            table_data.append(["", "", "", f"IGST {bill['igst_rate']:.0f}%", f"Rs.{bill['tax_amount']:.2f}"])
         else:
-            table_data.append(["", "", "", f"CGST+SGST {bill['cgst_rate']:.0f}+{bill['sgst_rate']:.0f}%", f"₹{bill['tax_amount']:.2f}"])
-    table_data.append(["", "", "", "Total", f"₹{bill['total_amount']:.2f}"])
+            table_data.append(["", "", "", f"CGST+SGST {bill['cgst_rate']:.0f}+{bill['sgst_rate']:.0f}%", f"Rs.{bill['tax_amount']:.2f}"])
+    table_data.append(["", "", "", "Total", f"Rs.{bill['total_amount']:.2f}"])
     if bill["payment_status"] != "Paid":
-        table_data.append(["", "", "", "Paid", f"₹{bill['paid_amount']:.2f}"])
-        table_data.append(["", "", "", "Due", f"₹{bill['due_amount']:.2f}"])
+        table_data.append(["", "", "", "Paid", f"Rs.{bill['paid_amount']:.2f}"])
+        table_data.append(["", "", "", "Due", f"Rs.{bill['due_amount']:.2f}"])
 
     tbl = Table(table_data, colWidths=[25 * mm, 60 * mm, 25 * mm, 20 * mm, 35 * mm])
     style_cmds = [
@@ -1106,6 +1108,38 @@ def build_bill_pdf(bill_id):
     if bill["notes"]:
         story.append(Spacer(1, 6))
         story.append(Paragraph(f"Notes: {bill['notes']}", normal))
+
+    # --- UPI QR code: only when payment is Online AND some amount is still due ---
+    upi_id = settings.get("upi_id", "")
+    if bill["payment_mode"] == "Online" and bill["due_amount"] and bill["due_amount"] > 0 and upi_id:
+        try:
+            pay_name = settings.get("company_name", "Merchant")
+            txn_note = f"Bill {bill['bill_no']}"
+            upi_uri = (
+                f"upi://pay?pa={urllib.parse.quote(upi_id)}"
+                f"&pn={urllib.parse.quote(pay_name)}"
+                f"&am={bill['due_amount']:.2f}&cu=INR"
+                f"&tn={urllib.parse.quote(txn_note)}"
+            )
+            qr_url = (
+                "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data="
+                + urllib.parse.quote(upi_uri, safe="")
+            )
+            with urllib.request.urlopen(qr_url, timeout=10) as resp:
+                qr_bytes = resp.read()
+            qr_buf = BytesIO(qr_bytes)
+            story.append(Spacer(1, 14))
+            story.append(Paragraph(
+                f"<b>Amount pending: Rs.{bill['due_amount']:.2f}</b> &nbsp;&nbsp; Scan to pay via UPI ({upi_id})",
+                normal,
+            ))
+            story.append(Spacer(1, 6))
+            story.append(Image(qr_buf, width=45 * mm, height=45 * mm))
+        except Exception:
+            # If the QR service is unreachable, skip the QR silently rather
+            # than failing the whole PDF download.
+            pass
+
     story.append(Spacer(1, 10))
     story.append(Paragraph(settings.get("footer_note", ""), normal))
 
@@ -1231,6 +1265,12 @@ def index():
     )
 
 
+# Must run at import time (not just under `if __name__ == "__main__"`),
+# because gunicorn imports this module as `app:app` and never executes
+# the __main__ block — without this, Render's fresh billing.db never
+# gets its tables created and every request fails with
+# "sqlite3.OperationalError: no such table: settings".
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
